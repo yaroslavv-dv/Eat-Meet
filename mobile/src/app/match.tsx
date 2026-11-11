@@ -14,8 +14,8 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { recommendHosts, type Recommendation } from '@/matching/cluster';
 import { MissingApiKeyError, getOpenAiApiKey } from '@/matching/embed';
-import { FOOD_PREFERENCES, type FoodPreference } from '@/matching/parameters';
-import { embedStaleProfiles, loadProfiles, upsertProfile } from '@/matching/store';
+import { FOOD_PREFERENCES, LOCATIONS, type FoodPreference, type LocationId } from '@/matching/parameters';
+import { embedStaleProfiles, loadProfiles, seedMockProfiles, upsertProfile } from '@/matching/store';
 import type { Role, StoredProfile } from '@/matching/types';
 
 export default function MatchScreen() {
@@ -26,6 +26,7 @@ export default function MatchScreen() {
   const [ageText, setAgeText] = useState('30');
   const [summary, setSummary] = useState('');
   const [foods, setFoods] = useState<FoodPreference[]>([]);
+  const [location, setLocation] = useState<LocationId | null>(null);
   const [keyMissing, setKeyMissing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -81,6 +82,10 @@ export default function MatchScreen() {
       setMessage('Choose at least one food preference.');
       return;
     }
+    if (!location) {
+      setMessage('Choose a location.');
+      return;
+    }
 
     setSaving(true);
     setMessage(null);
@@ -92,6 +97,7 @@ export default function MatchScreen() {
         age,
         summary,
         foodPreferences: foods,
+        location,
       });
       setProfiles(saved);
       const created = saved[saved.length - 1];
@@ -116,6 +122,22 @@ export default function MatchScreen() {
     }
   }
 
+  async function loadSamples() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const seeded = await seedMockProfiles();
+      setProfiles(seeded);
+      setSelectedId('mock-guest-binnenstad');
+      setKeyMissing(!getOpenAiApiKey());
+      setMessage('Loaded sample hosts and guests.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load samples');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <ScrollView
       style={[styles.scrollView, { backgroundColor: theme.background }]}
@@ -123,7 +145,7 @@ export default function MatchScreen() {
       <ThemedView style={styles.container}>
         <ThemedText type="subtitle">Match</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Hosts in the closest clusters are recommended to a guest.
+          Hosts near the guest, in the closest clusters, are recommended first.
         </ThemedText>
 
         {keyMissing ? (
@@ -201,17 +223,52 @@ export default function MatchScreen() {
             })}
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={saving}
-            onPress={() => {
-              void saveProfile();
-            }}
-            style={({ pressed }) => pressed && styles.pressed}>
-            <ThemedView type="backgroundSelected" style={styles.saveButton}>
-              <ThemedText type="smallBold">{saving ? 'Saving…' : 'Save profile'}</ThemedText>
-            </ThemedView>
-          </Pressable>
+          <ThemedText type="smallBold">Location</ThemedText>
+          <View style={styles.wrap}>
+            {LOCATIONS.map((place) => {
+              const selectedPlace = location === place.id;
+              return (
+                <Pressable
+                  key={place.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={place.label}
+                  accessibilityState={{ selected: selectedPlace }}
+                  onPress={() => setLocation(place.id)}
+                  style={({ pressed }) => pressed && styles.pressed}>
+                  <ThemedView
+                    type={selectedPlace ? 'backgroundSelected' : 'background'}
+                    style={styles.chip}>
+                    <ThemedText type="small">{place.label}</ThemedText>
+                  </ThemedView>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.row}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={() => {
+                void saveProfile();
+              }}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedView type="backgroundSelected" style={styles.saveButton}>
+                <ThemedText type="smallBold">{saving ? 'Saving…' : 'Save profile'}</ThemedText>
+              </ThemedView>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              onPress={() => {
+                void loadSamples();
+              }}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedView type="background" style={styles.saveButton}>
+                <ThemedText type="smallBold">Load samples</ThemedText>
+              </ThemedView>
+            </Pressable>
+          </View>
         </ThemedView>
 
         {message ? <ThemedText type="small">{message}</ThemedText> : null}
@@ -236,7 +293,7 @@ export default function MatchScreen() {
                   style={styles.person}>
                   <ThemedText type="smallBold">{profileLabel(profile)}</ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
-                    {profile.foodPreferences.join(', ')}
+                    {placeName(profile)} · {profile.foodPreferences.join(', ')}
                     {profile.embedding ? ' · embedded' : ' · not embedded'}
                   </ThemedText>
                 </ThemedView>
@@ -263,8 +320,8 @@ export default function MatchScreen() {
               <ThemedView key={recommendation.hostId} type="backgroundElement" style={styles.person}>
                 <ThemedText type="smallBold">{host ? profileLabel(host) : recommendation.hostId}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {Math.round(recommendation.similarity * 100)}% similar · cluster rank{' '}
-                  {recommendation.clusterRank}
+                  {host ? placeName(host) : 'No location'} · {Math.round(recommendation.similarity * 100)}%
+                  similar · cluster rank {recommendation.clusterRank}
                 </ThemedText>
               </ThemedView>
             );
@@ -279,6 +336,10 @@ function profileLabel(profile: StoredProfile): string {
   const summary = profile.summary.trim().split('\n')[0];
   const title = summary.length > 0 ? summary : 'No summary';
   return `${profile.role} · ${profile.age} · ${title}`;
+}
+
+function placeName(profile: StoredProfile): string {
+  return LOCATIONS.find((place) => place.id === profile.location)?.label ?? 'No location';
 }
 
 function createId(): string {

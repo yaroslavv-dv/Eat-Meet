@@ -1,4 +1,4 @@
-import { EMBEDDING_MODEL } from './parameters';
+import { EMBEDDING_MODEL, locationById } from './parameters';
 import type { ProfileInput } from './types';
 
 export function buildDocument(profile: ProfileInput): string {
@@ -7,8 +7,13 @@ export function buildDocument(profile: ProfileInput): string {
     `Role: ${profile.role}`,
     `Age: ${profile.age}`,
     `Food preferences: ${foods.length > 0 ? foods.join(', ') : 'none'}`,
-    `Summary: ${profile.summary.trim()}`,
   ];
+
+  if (profile.location) {
+    lines.push(`Location: ${locationById(profile.location).label}`);
+  }
+
+  lines.push(`Summary: ${profile.summary.trim()}`);
 
   if (profile.ratings?.asHost != null) {
     lines.push(`Host rating: ${profile.ratings.asHost}`);

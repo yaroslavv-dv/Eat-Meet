@@ -1,7 +1,12 @@
+import { LOCATIONS, type LocationId } from './parameters';
 import type { StoredProfile } from './types';
 
 export const CLUSTER_COSINE_DISTANCE_THRESHOLD = 0.35;
 export const RECOMMENDATION_LIMIT = 5;
+export const LOCATION_SCALE_KM = 6;
+
+const REFERENCE_LATITUDE = LOCATIONS[0].latitude;
+const REFERENCE_LONGITUDE = LOCATIONS[0].longitude;
 
 export type PersonCluster = {
   id: string;
@@ -29,7 +34,12 @@ export function clusterProfiles(profiles: StoredProfile[]): PersonCluster[] {
 
   const width = embedded[0].embedding.length;
   const usable = embedded.filter((profile) => profile.embedding.length === width);
-  const vectors = new Map(usable.map((profile) => [profile.id, l2Normalize(profile.embedding)]));
+  const vectors = new Map(
+    usable.flatMap((profile) => {
+      const vector = vectorFor(profile);
+      return vector ? [[profile.id, vector] as const] : [];
+    }),
+  );
 
   let clusters: WorkingCluster[] = usable.map((profile, index) => ({
     id: index,
@@ -79,7 +89,8 @@ export function recommendHosts(
   const guest = profiles.find((profile) => profile.id === guestId && profile.role === 'guest');
   if (!guest?.embedding || guest.embedding.length === 0) return [];
 
-  const guestVector = l2Normalize(guest.embedding);
+  const guestVector = vectorFor(guest);
+  if (!guestVector) return [];
   const rankedClusters = clusterProfiles(profiles)
     .map((cluster) => ({
       cluster,
@@ -96,10 +107,10 @@ export function recommendHosts(
   for (let clusterRank = 0; clusterRank < rankedClusters.length; clusterRank++) {
     const hosts = rankedClusters[clusterRank].cluster.memberIds
       .map((id) => byId.get(id))
-      .filter((profile): profile is StoredProfile => profile?.role === 'host' && profile.embedding != null)
+      .filter((profile): profile is StoredProfile => profile?.role === 'host' && vectorFor(profile) != null)
       .map((host) => ({
         hostId: host.id,
-        similarity: cosineSimilarity(guestVector, l2Normalize(host.embedding as number[])),
+        similarity: cosineSimilarity(guestVector, vectorFor(host) as number[]),
         clusterRank,
       }))
       .sort((left, right) => right.similarity - left.similarity || left.hostId.localeCompare(right.hostId));
@@ -111,6 +122,25 @@ export function recommendHosts(
   }
 
   return recommendations;
+}
+
+function vectorFor(profile: StoredProfile): number[] | null {
+  if (!profile.embedding || profile.embedding.length === 0) return null;
+  const semantic = l2Normalize(profile.embedding);
+  const [east, north] = geoFeatures(profile.location);
+  return l2Normalize([...semantic, east, north]);
+}
+
+function geoFeatures(locationId: LocationId | undefined): [number, number] {
+  const location = LOCATIONS.find((item) => item.id === locationId);
+  if (!location) return [0, 0];
+
+  const eastKm =
+    (location.longitude - REFERENCE_LONGITUDE) *
+    111.32 *
+    Math.cos((REFERENCE_LATITUDE * Math.PI) / 180);
+  const northKm = (location.latitude - REFERENCE_LATITUDE) * 110.57;
+  return [eastKm / LOCATION_SCALE_KM, northKm / LOCATION_SCALE_KM];
 }
 
 function averageLinkageDistance(

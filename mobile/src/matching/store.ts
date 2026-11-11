@@ -1,5 +1,6 @@
 import { buildDocument, contentHash } from './document';
 import { embedTexts } from './embed';
+import { mockProfiles } from './mocks';
 import type { ProfileInput, StoredProfile } from './types';
 
 const STORAGE_KEY = 'eat-meet.matching.profiles';
@@ -52,6 +53,14 @@ export async function upsertProfile(input: ProfileInput): Promise<StoredProfile[
 
   await saveProfiles(profiles);
   return profiles;
+}
+
+export async function seedMockProfiles(): Promise<StoredProfile[]> {
+  const current = await loadProfiles();
+  const kept = current.filter((profile) => !profile.id.startsWith('mock-'));
+  const next = [...kept, ...mockProfiles()];
+  await saveProfiles(next);
+  return next;
 }
 
 export async function embedStaleProfiles(profiles?: StoredProfile[]): Promise<StoredProfile[]> {

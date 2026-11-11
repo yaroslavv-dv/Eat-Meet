@@ -1,4 +1,4 @@
-import type { FoodPreference } from './parameters';
+import type { FoodPreference, LocationId } from './parameters';
 
 export type Role = 'host' | 'guest';
 
@@ -13,6 +13,7 @@ export type ProfileInput = {
   summary: string;
   age: number;
   foodPreferences: FoodPreference[];
+  location?: LocationId;
   ratings?: Ratings;
 };
 
