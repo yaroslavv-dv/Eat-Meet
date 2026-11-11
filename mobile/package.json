@@ -44,7 +44,8 @@
     "web": "expo start --web",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test:domain": "node scripts/test-domain.mjs"
+    "test:domain": "node scripts/test-domain.mjs",
+    "test:matching": "npx --yes tsx@4 scripts/check-matching.mts"
   },
   "private": true
 }

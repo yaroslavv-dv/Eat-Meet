@@ -4,7 +4,7 @@
 
 Eat&Meet connects people who like to cook (hosts) with people who want an affordable home-cooked meal and, if they feel like it, new company (guests). Guests chip in for ingredients, hosts earn a small capped preparation fee, and a transparent platform fee funds Eat&Meet. Menus are published at least 24 hours ahead and hosts shop for *confirmed* diners, which is the mechanism for less unnecessary food buying.
 
-Prototype for the Green Business Challenge – AI Edition 2026 (Groningen). **This build contains no AI features.**
+Prototype for the Green Business Challenge – AI Edition 2026 (Groningen). The only AI component is the optional host ↔ guest **Match** tab (OpenAI embeddings + on-device clustering); everything else works without it.
 
 ---
 
@@ -26,6 +26,7 @@ npx expo start       # then scan the QR code with the iPhone camera → opens in
 npm run typecheck      # TypeScript
 npm run lint           # ESLint (eslint-config-expo)
 npm run test:domain    # 26 business-rule tests (pricing, 24 h rule, capacity, allergens, cancellations, reviews, persistence)
+npm run test:matching  # clustering & host-recommendation checks (fetches `tsx` via npx the first time)
 ```
 
 ---
@@ -40,6 +41,7 @@ Before presenting: **Profile → Demo controls → Reset demo data**. All dates 
 | 2. Host manages | **Marieke · Host** | Dashboard shows the new booking and contributions → open the risotto → guest list with *Allergies at this table: Peanuts (Sofia)* → **Shopping list**: “4 plates, not 7” → tick items as bought, type actual costs. |
 | 3. Host creates a dinner | **Marieke · Host** | **Create a dinner** → *Fill in an example* (or type) → pick demo photos → *Use example menu & ingredients* → preferences → costs (live budget, prep fee, platform fee) → Review → **Publish**. Try a start time less than 24 h away first to show the rule blocking it. |
 | 4. Guest books the new dinner | **Sofia · Guest** | Discover → search “gnocchi” → reserve → seats drop → appears under **My dinners**. |
+| Bonus: Match | either | **Match** tab → *Load samples* (works offline – sample vectors are precomputed) → pick a guest → recommended hosts ranked by cluster and similarity, with location taken into account. |
 | 5. Impact | either | **Marieke**: Dashboard → *Wrap up dinner* for yesterday’s soup (attendance, portions, leftovers). **Sofia**: My dinners → Past → *Rate food & hygiene* (only possible now). Then the **Impact** tab: planned vs booked plates, measured portions/leftovers, cost split, and the explicit assumptions. |
 
 ---
@@ -49,6 +51,8 @@ Before presenting: **Profile → Demo controls → Reset demo data**. All dates 
 **Guest:** onboarding with adult confirmation · preferences (diet, other needs, *separate* EU-14 allergy section, alcohol, age group, social style) · Discover with search and working filters (date, price, diet, atmosphere, seats, neighbourhood, alcohol-free, allergen-safe, “fits me”) · dinner details (photos, host, ratings from real review records, menu, ingredients, allergens, atmosphere, privacy-aware location, price breakdown) · 3-step reservation (safety acknowledgements → contribution & cancellation terms → simulated confirmation) · My dinners (upcoming / past / cancelled) · cancellation with refund rules · reviews (food quality/taste/overall + hygiene), only after attendance, once per reservation · report a concern.
 
 **Host:** dashboard (bookings, seats, contributions, prep fees, feedback, drafts, past dinners, dinners needing wrap-up) · 6-step Create Dinner wizard with validation, 24-hour publish rule, photo picker + labelled demo photos, structured ingredient editor (per plate / whole dinner, units, prices, allergens), live budget and pricing, preview, drafts · dinner management (guest dietary/allergy info, money split, cancel dinner with full refunds) · shopping list sized to confirmed diners with purchase tracking and actual costs · post-dinner wrap-up (attendance, diners, portions, leftovers and their fate).
+
+**Matching (optional AI):** Match tab to add hosts/guests (role, age, summary, food preferences, Groningen area). Profiles are embedded with OpenAI `text-embedding-3-small`, clustered on the device (average-linkage, cosine distance, plus a location signal) and guests get host recommendations from the closest clusters first. Without an API key, profiles are still saved and the sample data still produces recommendations.
 
 **Platform:** sustainability/impact dashboard (no invented CO₂ numbers) · demo profile & role switcher · local persistence (survives app restarts) · trust & safety and business-model explanations in Profile.
 
@@ -81,6 +85,8 @@ mobile/
     host/complete/[id]    post-dinner wrap-up (modal)
     onboarding, preferences, switch-profile, report/[id]
   src/domain/             typed models + pure business rules (no React) ← start here
+  src/matching/           embeddings (OpenAI), on-device clustering & host recommendations
+  src/components/match-screen.tsx   Match tab UI (route: src/app/(tabs)/match.tsx)
   src/data/               seed data (Groningen), image registry, AsyncStorage repository
   src/services/payments   PaymentProvider interface + DemoPaymentProvider
   src/state/store.tsx     app store: loads/persists data, exposes typed actions
@@ -88,12 +94,23 @@ mobile/
   src/features/           role-specific tab screens
   src/theme/tokens.ts     colours, type scale, spacing, radius, shadows, chart palette
   scripts/test-domain.mjs business-rule tests
+  scripts/check-matching.mts  matching tests
   assets/images/demo/     demo photos (see CREDITS.md)
 ```
 
 **Swapping in a backend later:** implement `AppRepository` (`src/data/repository.ts`) against an API and a real `PaymentProvider` (`src/services/payments.ts`); screens and rules don’t change. The pure functions in `src/domain/actions.ts` describe exactly what the server must enforce.
 
 ---
+
+## Enabling AI matching
+
+Create `mobile/.env.local` (git-ignored) and restart `npx expo start`:
+
+```
+EXPO_PUBLIC_OPENAI_API_KEY=sk-...
+```
+
+Saved profiles are embedded automatically when the Match tab opens. What is sent to OpenAI: role, age, food preferences, Groningen area, the free-text summary and ratings. **Security:** `EXPO_PUBLIC_*` variables are compiled into the JavaScript bundle, so anyone with the build can read the key. Fine for a local demo; before sharing a build, move the embedding call to a small backend and keep the key there.
 
 ## Honest limitations
 
