@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { SymbolView } from 'expo-symbols';
 import {
   Tabs,
   TabList,
@@ -6,7 +8,6 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
 import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -27,15 +28,21 @@ export default function AppTabs() {
           <TabTrigger name="explore" href="/explore" asChild>
             <TabButton>Explore</TabButton>
           </TabTrigger>
+          <TabTrigger name="match" href="/match" asChild>
+            <TabButton>Match</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>
   );
 }
 
+// The tab slot ref does not match Pressable's ref in the current React Native types.
+const TabPressable = Pressable as unknown as (props: TabTriggerSlotProps & { children?: ReactNode }) => ReactNode;
+
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+    <TabPressable {...props} style={({ pressed }) => pressed && styles.pressed}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>
@@ -43,7 +50,7 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
           {children}
         </ThemedText>
       </ThemedView>
-    </Pressable>
+    </TabPressable>
   );
 }
 
