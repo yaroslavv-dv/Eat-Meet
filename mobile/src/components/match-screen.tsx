@@ -1,25 +1,23 @@
 import { useEffect, useState } from 'react';
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { TabHeader } from '@/components/app/tab-header';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Chip, Tag } from '@/components/ui/chip';
+import { FieldLabel, Segmented, TextField } from '@/components/ui/form';
+import { Icon } from '@/components/ui/icon';
+import { EmptyState, Notice, SectionHeader } from '@/components/ui/misc';
+import { TabScreen } from '@/components/ui/screen';
+import { Txt } from '@/components/ui/text';
 import { recommendHosts, type Recommendation } from '@/matching/cluster';
 import { MissingApiKeyError, getOpenAiApiKey } from '@/matching/embed';
-import { FOOD_PREFERENCES, LOCATIONS, type FoodPreference, type LocationId } from '@/matching/parameters';
+import { EMBEDDING_MODEL, FOOD_PREFERENCES, LOCATIONS, type FoodPreference, type LocationId } from '@/matching/parameters';
 import { embedStaleProfiles, loadProfiles, seedMockProfiles, upsertProfile } from '@/matching/store';
 import type { Role, StoredProfile } from '@/matching/types';
+import { colors, radius, space } from '@/theme/tokens';
 
 export default function MatchScreen() {
-  const theme = useTheme();
   const [profiles, setProfiles] = useState<StoredProfile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [role, setRole] = useState<Role>('guest');
@@ -74,8 +72,9 @@ export default function MatchScreen() {
 
   async function saveProfile() {
     const age = Number(ageText);
-    if (!Number.isFinite(age) || age < 0 || age > 120) {
-      setMessage('Enter an age from 0 to 120.');
+    // Eat&Meet is adults-only.
+    if (!Number.isFinite(age) || age < 18 || age > 120) {
+      setMessage('Enter an age from 18 to 120.');
       return;
     }
     if (foods.length === 0) {
@@ -139,145 +138,86 @@ export default function MatchScreen() {
   }
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.contentContainer}>
-      <ThemedView style={styles.container}>
-        <ThemedText type="subtitle">Match</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
+    <TabScreen>
+      <TabHeader overline="Host ↔ guest matching" title="Match">
+        <Txt variant="callout" color="muted">
           Hosts near the guest, in the closest clusters, are recommended first.
-        </ThemedText>
+        </Txt>
+      </TabHeader>
 
-        {keyMissing ? (
-          <ThemedView type="backgroundElement" style={styles.notice}>
-            <ThemedText type="small">
-              Add EXPO_PUBLIC_OPENAI_API_KEY to mobile/.env.local to create embeddings. Profiles
-              are saved, and recommendations appear once vectors exist.
-            </ThemedText>
-          </ThemedView>
-        ) : null}
+      {keyMissing ? (
+        <Notice tone="warning" icon="lock" title="Embeddings are off">
+          Add EXPO_PUBLIC_OPENAI_API_KEY to mobile/.env.local to create embeddings. Profiles are saved, and recommendations appear once
+          vectors exist.
+        </Notice>
+      ) : null}
 
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="smallBold">New person</ThemedText>
-          <View style={styles.row}>
-            {(['guest', 'host'] as const).map((value) => {
-              const selectedRole = role === value;
-              return (
-                <Pressable
-                  key={value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: selectedRole }}
-                  onPress={() => setRole(value)}
-                  style={({ pressed }) => pressed && styles.pressed}>
-                  <ThemedView
-                    type={selectedRole ? 'backgroundSelected' : 'background'}
-                    style={styles.chip}>
-                    <ThemedText type="small">{value}</ThemedText>
-                  </ThemedView>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <TextInput
-            accessibilityLabel="Age"
-            value={ageText}
-            onChangeText={setAgeText}
-            keyboardType="number-pad"
-            placeholder="Age"
-            placeholderTextColor={theme.textSecondary}
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-          />
-          <TextInput
-            accessibilityLabel="Summary"
-            value={summary}
-            onChangeText={setSummary}
-            placeholder="Unstructured summary"
-            placeholderTextColor={theme.textSecondary}
-            multiline
-            style={[
-              styles.input,
-              styles.summary,
-              { color: theme.text, borderColor: theme.backgroundSelected },
-            ]}
-          />
-
+      <Card style={{ gap: space.lg }}>
+        <Txt variant="title3">New person</Txt>
+        <Segmented<Role>
+          value={role}
+          onChange={setRole}
+          options={[
+            { value: 'guest', label: 'Guest' },
+            { value: 'host', label: 'Host' },
+          ]}
+        />
+        <TextField label="Age" value={ageText} onChangeText={setAgeText} keyboardType="number-pad" placeholder="Age" accessibilityLabel="Age" />
+        <TextField
+          label="Summary"
+          value={summary}
+          onChangeText={setSummary}
+          placeholder="Unstructured summary – who you are, what you like to cook or eat"
+          multiline
+          accessibilityLabel="Summary"
+        />
+        <View style={{ gap: space.sm }}>
+          <FieldLabel label="Food preferences" />
           <View style={styles.wrap}>
-            {FOOD_PREFERENCES.map((preference) => {
-              const selectedFood = foods.includes(preference);
-              return (
-                <Pressable
-                  key={preference}
-                  accessibilityRole="button"
-                  accessibilityLabel={preference}
-                  accessibilityState={{ selected: selectedFood }}
-                  onPress={() => toggleFood(preference)}
-                  style={({ pressed }) => pressed && styles.pressed}>
-                  <ThemedView
-                    type={selectedFood ? 'backgroundSelected' : 'background'}
-                    style={styles.chip}>
-                    <ThemedText type="small">{preference}</ThemedText>
-                  </ThemedView>
-                </Pressable>
-              );
-            })}
+            {FOOD_PREFERENCES.map((preference) => (
+              <Chip key={preference} label={preference} selected={foods.includes(preference)} onPress={() => toggleFood(preference)} />
+            ))}
           </View>
-
-          <ThemedText type="smallBold">Location</ThemedText>
+        </View>
+        <View style={{ gap: space.sm }}>
+          <FieldLabel label="Location" />
           <View style={styles.wrap}>
-            {LOCATIONS.map((place) => {
-              const selectedPlace = location === place.id;
-              return (
-                <Pressable
-                  key={place.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={place.label}
-                  accessibilityState={{ selected: selectedPlace }}
-                  onPress={() => setLocation(place.id)}
-                  style={({ pressed }) => pressed && styles.pressed}>
-                  <ThemedView
-                    type={selectedPlace ? 'backgroundSelected' : 'background'}
-                    style={styles.chip}>
-                    <ThemedText type="small">{place.label}</ThemedText>
-                  </ThemedView>
-                </Pressable>
-              );
-            })}
+            {LOCATIONS.map((place) => (
+              <Chip key={place.id} label={place.label} icon="location" selected={location === place.id} onPress={() => setLocation(place.id)} />
+            ))}
           </View>
+        </View>
+        <View style={styles.row}>
+          <Button
+            title={saving ? 'Saving…' : 'Save profile'}
+            onPress={() => {
+              void saveProfile();
+            }}
+            disabled={saving}
+            size="md"
+            style={{ flex: 1 }}
+          />
+          <Button
+            title="Load samples"
+            variant="secondary"
+            onPress={() => {
+              void loadSamples();
+            }}
+            disabled={saving}
+            size="md"
+            style={{ flex: 1 }}
+          />
+        </View>
+      </Card>
 
-          <View style={styles.row}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={saving}
-              onPress={() => {
-                void saveProfile();
-              }}
-              style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundSelected" style={styles.saveButton}>
-                <ThemedText type="smallBold">{saving ? 'Saving…' : 'Save profile'}</ThemedText>
-              </ThemedView>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={saving}
-              onPress={() => {
-                void loadSamples();
-              }}
-              style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="background" style={styles.saveButton}>
-                <ThemedText type="smallBold">Load samples</ThemedText>
-              </ThemedView>
-            </Pressable>
-          </View>
-        </ThemedView>
+      {message ? <Notice tone="neutral">{message}</Notice> : null}
 
-        {message ? <ThemedText type="small">{message}</ThemedText> : null}
-
-        <ThemedText type="smallBold">People</ThemedText>
+      <View style={{ gap: space.md }}>
+        <SectionHeader title="People" subtitle={profiles.length ? 'Select a guest to see recommended hosts.' : undefined} />
         {profiles.length === 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            No one saved yet.
-          </ThemedText>
+          <Card tone="sand" elevated={false}>
+            <EmptyState compact icon="people" title="No one saved yet" message="Add a person above or load the sample hosts and guests." />
+          </Card>
         ) : (
           profiles.map((profile) => {
             const isSelected = profile.id === selectedId;
@@ -287,48 +227,62 @@ export default function MatchScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
                 onPress={() => setSelectedId(profile.id)}
-                style={({ pressed }) => pressed && styles.pressed}>
-                <ThemedView
-                  type={isSelected ? 'backgroundSelected' : 'backgroundElement'}
-                  style={styles.person}>
-                  <ThemedText type="smallBold">{profileLabel(profile)}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {placeName(profile)} · {profile.foodPreferences.join(', ')}
-                    {profile.embedding ? ' · embedded' : ' · not embedded'}
-                  </ThemedText>
-                </ThemedView>
+                style={({ pressed }) => [styles.person, isSelected && styles.personSelected, pressed && { opacity: 0.85 }]}>
+                <View style={styles.personHead}>
+                  <Tag label={profile.role} tone={profile.role === 'host' ? 'terracotta' : 'sage'} size="sm" />
+                  <Txt variant="callout" weight="700" numberOfLines={1} style={{ flex: 1 }}>
+                    {profileLabel(profile)}
+                  </Txt>
+                </View>
+                <Txt variant="footnote" color="muted">
+                  {placeName(profile)} · {profile.foodPreferences.join(', ')}
+                  {profile.embedding ? ' · embedded' : ' · not embedded'}
+                </Txt>
               </Pressable>
             );
           })
         )}
+      </View>
 
-        <ThemedText type="smallBold">Recommended hosts</ThemedText>
+      <View style={{ gap: space.md }}>
+        <SectionHeader title="Recommended hosts" />
         {selected?.role !== 'guest' ? (
-          <ThemedText type="small" themeColor="textSecondary">
+          <Txt variant="callout" color="muted">
             Select a guest to see host recommendations.
-          </ThemedText>
+          </Txt>
         ) : recommendations.length === 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {selected.embedding
-              ? 'No embedded hosts to recommend yet.'
-              : 'This guest has no embedding yet.'}
-          </ThemedText>
+          <Txt variant="callout" color="muted">
+            {selected.embedding ? 'No embedded hosts to recommend yet.' : 'This guest has no embedding yet.'}
+          </Txt>
         ) : (
           recommendations.map((recommendation) => {
             const host = profiles.find((profile) => profile.id === recommendation.hostId);
             return (
-              <ThemedView key={recommendation.hostId} type="backgroundElement" style={styles.person}>
-                <ThemedText type="smallBold">{host ? profileLabel(host) : recommendation.hostId}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {host ? placeName(host) : 'No location'} · {Math.round(recommendation.similarity * 100)}%
-                  similar · cluster rank {recommendation.clusterRank}
-                </ThemedText>
-              </ThemedView>
+              <Card key={recommendation.hostId} style={{ gap: space.xs }}>
+                <View style={styles.personHead}>
+                  <Icon name="home" size={15} color={colors.terracotta} />
+                  <Txt variant="callout" weight="700" numberOfLines={1} style={{ flex: 1 }}>
+                    {host ? profileLabel(host) : recommendation.hostId}
+                  </Txt>
+                  <Txt variant="callout" weight="700" color="forest">
+                    {Math.round(recommendation.similarity * 100)}%
+                  </Txt>
+                </View>
+                <Txt variant="footnote" color="muted">
+                  {host ? placeName(host) : 'No location'} · {Math.round(recommendation.similarity * 100)}% similar · cluster rank{' '}
+                  {recommendation.clusterRank}
+                </Txt>
+              </Card>
             );
           })
         )}
-      </ThemedView>
-    </ScrollView>
+      </View>
+
+      <Txt variant="caption" color="faint" align="center" style={{ paddingHorizontal: space.lg }}>
+        Profile summaries, age, food preferences and area are sent to OpenAI ({EMBEDDING_MODEL}) to create embeddings. Clustering and
+        matching run on this device.
+      </Txt>
+    </TabScreen>
   );
 }
 
@@ -350,68 +304,16 @@ function createId(): string {
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingTop: Platform.OS === 'web' ? Spacing.six : Spacing.four,
-    paddingBottom: BottomTabInset + Spacing.four,
-    paddingHorizontal: Spacing.three,
-  },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-    gap: Spacing.three,
-    width: '100%',
-  },
-  notice: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-  },
-  card: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-    gap: Spacing.two,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  wrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-  },
-  chip: {
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    fontSize: 16,
-  },
-  summary: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  saveButton: {
-    alignSelf: 'flex-start',
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-  },
+  row: { flexDirection: 'row', gap: space.sm },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   person: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-    gap: Spacing.one,
+    gap: space.xs,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
   },
-  pressed: {
-    opacity: 0.7,
-  },
+  personSelected: { borderColor: colors.forest, backgroundColor: colors.sageSoft },
+  personHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
 });
